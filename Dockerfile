@@ -47,3 +47,5 @@ HEALTHCHECK \
     CMD curl --fail http://localhost:9005/health || exit 1
 
 CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9005", "--workers", "1"]
+
+
