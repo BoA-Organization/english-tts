@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/pytorch:25.08-py3
+FROM pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -11,6 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 WORKDIR /app
 
+# Audio libraries, Git, and health-check utility
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
@@ -18,27 +19,39 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python -m pip install --upgrade pip setuptools wheel
+RUN python -m pip install --upgrade \
+    pip \
+    setuptools \
+    wheel
 
-# The NVIDIA 25.08 image already includes CUDA-enabled PyTorch 2.8.
-RUN python -c "import torch; import torchaudio; \
-print('PyTorch:', torch.__version__); \
-print('CUDA:', torch.version.cuda); \
-print('TorchAudio:', torchaudio.__version__)"
+# The base image already contains CUDA-enabled torch 2.8.0.
+# Install only the matching torchaudio package without replacing torch.
+RUN python -m pip install \
+    torchaudio==2.8.0 \
+    --index-url https://download.pytorch.org/whl/cu128 \
+    --no-deps
 
 COPY requirements.txt /app/requirements.txt
 
 RUN python -m pip install -r /app/requirements.txt
 
-RUN python -c "import torch; import omnivoice; \
-print('CUDA available:', torch.cuda.is_available()); \
+# Verify required packages during the image build
+RUN python -c "\
+import torch; \
+import torchaudio; \
+import omnivoice; \
+print('PyTorch:', torch.__version__); \
+print('CUDA build:', torch.version.cuda); \
+print('TorchAudio:', torchaudio.__version__); \
 print('OmniVoice import successful')"
 
 COPY app.py /app/app.py
 COPY speaker.mp3 /app/speaker.mp3
 COPY speaker.txt /app/speaker.txt
 
-RUN mkdir -p /models/huggingface /models/torch
+RUN mkdir -p \
+    /models/huggingface \
+    /models/torch
 
 EXPOSE 9005
 
@@ -50,4 +63,4 @@ HEALTHCHECK \
     CMD curl --fail http://localhost:9005/health || exit 1
 
 CMD ["python","-m","uvicorn","app:app","--host","0.0.0.0","--port","9005","--workers","1"]
-  
+ 
