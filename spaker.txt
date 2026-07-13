@@ -1,0 +1,1 @@
+To check your balance, please enter your account number on the screen.Please enter the account number you want to deposit into. Then, select whether this is a self or business deposit. If it's a business deposit, please enter the depositor's name.
