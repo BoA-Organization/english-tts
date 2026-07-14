@@ -92,7 +92,7 @@ def health():
     }
 
 
-@app.post("/generate")
+@app.post("/tts/en")
 def generate_speech(request: TTSRequest):
     if model is None:
         raise HTTPException(
