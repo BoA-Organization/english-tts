@@ -8,8 +8,8 @@ import soundfile as sf
 import torch
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 from omnivoice import OmniVoice
+from pydantic import BaseModel, Field
 
 
 MODEL_ID = os.getenv("MODEL_ID", "k2-fsa/OmniVoice")
@@ -35,12 +35,21 @@ async def lifespan(app: FastAPI):
             "CUDA GPU was not detected. Start the container with --gpus all."
         )
 
-    if not os.path.isfile(SPEAKER_WAV):
-        raise RuntimeError(f"Speaker audio was not found: {SPEAKER_WAV}")
+    if not os.path.isfile(SPEAKER_AUDIO):
+        raise RuntimeError(
+            f"Speaker audio was not found: {SPEAKER_AUDIO}"
+        )
 
-    if os.path.isfile(SPEAKER_TEXT_FILE):
-        with open(SPEAKER_TEXT_FILE, "r", encoding="utf-8") as file:
-            speaker_text = file.read().strip()
+    if not os.path.isfile(SPEAKER_TEXT_FILE):
+        raise RuntimeError(
+            f"Speaker text was not found: {SPEAKER_TEXT_FILE}"
+        )
+
+    with open(SPEAKER_TEXT_FILE, "r", encoding="utf-8") as file:
+        speaker_text = file.read().strip()
+
+    if not speaker_text:
+        raise RuntimeError("speaker.txt is empty.")
 
     print(f"Loading {MODEL_ID} on GPU...")
 
@@ -51,6 +60,7 @@ async def lifespan(app: FastAPI):
     )
 
     print(f"OmniVoice loaded on {torch.cuda.get_device_name(0)}")
+
     yield
 
     model = None
@@ -73,33 +83,41 @@ def health():
         "status": "healthy" if healthy else "unhealthy",
         "model_loaded": model is not None,
         "gpu_available": gpu_available,
-        "gpu_name": torch.cuda.get_device_name(0) if gpu_available else None,
+        "gpu_name": (
+            torch.cuda.get_device_name(0)
+            if gpu_available
+            else None
+        ),
+        "speaker_audio": os.path.basename(SPEAKER_AUDIO),
     }
 
 
 @app.post("/generate")
 def generate_speech(request: TTSRequest):
     if model is None:
-        raise HTTPException(status_code=503, detail="The TTS model is not loaded.")
+        raise HTTPException(
+            status_code=503,
+            detail="The TTS model is not loaded.",
+        )
 
     text = request.text.strip()
+
     if not text:
-        raise HTTPException(status_code=400, detail="Text cannot be empty.")
+        raise HTTPException(
+            status_code=400,
+            detail="Text cannot be empty.",
+        )
 
     started_at = time.perf_counter()
 
     try:
         with generation_lock:
             with torch.inference_mode():
-                generation_args = {
-                    "text": text,
-                    "ref_audio": SPEAKER_WAV,
-                }
-
-                if speaker_text:
-                    generation_args["ref_text"] = speaker_text
-
-                audio_list = model.generate(**generation_args)
+                audio_list = model.generate(
+                    text=text,
+                    ref_audio=SPEAKER_AUDIO,
+                    ref_text=speaker_text,
+                )
 
         if not audio_list:
             raise RuntimeError("The model returned no audio.")
@@ -113,7 +131,14 @@ def generate_speech(request: TTSRequest):
             audio = audio.squeeze()
 
         wav_buffer = io.BytesIO()
-        sf.write(wav_buffer, audio, SAMPLE_RATE, format="WAV")
+
+        sf.write(
+            wav_buffer,
+            audio,
+            SAMPLE_RATE,
+            format="WAV",
+        )
+
         wav_buffer.seek(0)
 
         elapsed = time.perf_counter() - started_at
@@ -130,6 +155,7 @@ def generate_speech(request: TTSRequest):
 
     except torch.cuda.OutOfMemoryError as exc:
         torch.cuda.empty_cache()
+
         raise HTTPException(
             status_code=503,
             detail="GPU memory is exhausted.",
