@@ -19,6 +19,7 @@ SAMPLE_RATE = 24_000
 
 model = None
 speaker_text = None
+speaker_audio = None
 generation_lock = threading.Lock()
 
 
@@ -28,7 +29,7 @@ class TTSRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global model, speaker_text
+    global model, speaker_text, speaker_audio
 
     if not torch.cuda.is_available():
         raise RuntimeError(
@@ -51,6 +52,10 @@ async def lifespan(app: FastAPI):
     if not speaker_text:
         raise RuntimeError("speaker.txt is empty.")
 
+    print(f"Loading speaker audio from {SPEAKER_AUDIO}...")
+    speaker_audio, _ = sf.read(SPEAKER_AUDIO)
+    print(f"Speaker audio loaded: shape={speaker_audio.shape}")
+
     print(f"Loading {MODEL_ID} on GPU...")
 
     model = OmniVoice.from_pretrained(
@@ -59,11 +64,28 @@ async def lifespan(app: FastAPI):
         torch_dtype=torch.float16,
     )
 
+    # Ensure model stays on GPU
+    model.eval()
+    
     print(f"OmniVoice loaded on {torch.cuda.get_device_name(0)}")
+    
+    # Warmup: Run a test generation to compile kernels and cache operations
+    print("Warming up model with test generation...")
+    try:
+        with torch.inference_mode():
+            _ = model.generate(
+                text="Hello world",
+                ref_audio=speaker_audio,
+                ref_text=speaker_text,
+            )
+        print("Model warmup completed successfully")
+    except Exception as e:
+        print(f"Warning: Model warmup failed: {e}")
 
     yield
 
     model = None
+    speaker_audio = None
     torch.cuda.empty_cache()
 
 
@@ -115,7 +137,7 @@ def generate_speech(request: TTSRequest):
             with torch.inference_mode():
                 audio_list = model.generate(
                     text=text,
-                    ref_audio=SPEAKER_AUDIO,
+                    ref_audio=speaker_audio,
                     ref_text=speaker_text,
                 )
 
