@@ -75,8 +75,10 @@ async def lifespan(app: FastAPI):
 
     logger.info(f"Loading speaker audio from {SPEAKER_AUDIO}...")
     try:
-        speaker_audio, sample_rate = sf.read(SPEAKER_AUDIO)
-        logger.info(f"Speaker audio loaded: shape={speaker_audio.shape}, sample_rate={sample_rate}, dtype={speaker_audio.dtype}")
+        speaker_audio_data, speaker_sample_rate = sf.read(SPEAKER_AUDIO)
+        # OmniVoice expects (audio, sample_rate) tuple for ref_audio
+        speaker_audio = (speaker_audio_data, speaker_sample_rate)
+        logger.info(f"Speaker audio loaded: shape={speaker_audio_data.shape}, sample_rate={speaker_sample_rate}, dtype={speaker_audio_data.dtype}")
     except Exception as e:
         logger.error(f"Failed to load speaker audio: {e}")
         logger.error(traceback.format_exc())
@@ -175,7 +177,7 @@ def generate_speech(request: TTSRequest):
         logger.info("Acquiring generation lock...")
         with generation_lock:
             logger.info("Lock acquired, starting generation...")
-            logger.debug(f"Speaker audio shape: {speaker_audio.shape}, dtype: {speaker_audio.dtype}")
+            logger.debug(f"Speaker audio type: {type(speaker_audio)}")
             logger.debug(f"Speaker text: {speaker_text[:50]}...")
             
             with torch.inference_mode():
