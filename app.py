@@ -87,6 +87,11 @@ async def lifespan(app: FastAPI):
             speaker_audio_data = speaker_audio_data.mean(axis=1)
             logger.info(f"Converted to mono: shape={speaker_audio_data.shape}")
         
+        # Convert to float32 to match model dtype
+        if speaker_audio_data.dtype != 'float32':
+            speaker_audio_data = speaker_audio_data.astype('float32')
+            logger.info(f"Converted dtype to float32")
+        
         # Normalize audio if needed to prevent silence detection issues
         if speaker_audio_data.max() > 0:
             speaker_audio_data = speaker_audio_data / max(abs(speaker_audio_data.max()), abs(speaker_audio_data.min()))
@@ -94,7 +99,7 @@ async def lifespan(app: FastAPI):
         
         # OmniVoice expects (audio, sample_rate) tuple for ref_audio
         speaker_audio = (speaker_audio_data, speaker_sample_rate)
-        logger.info(f"Speaker audio prepared: shape={speaker_audio_data.shape}, normalized_range=[{speaker_audio_data.min():.6f}, {speaker_audio_data.max():.6f}]")
+        logger.info(f"Speaker audio prepared: shape={speaker_audio_data.shape}, dtype={speaker_audio_data.dtype}, normalized_range=[{speaker_audio_data.min():.6f}, {speaker_audio_data.max():.6f}]")
     except Exception as e:
         logger.error(f"Failed to load speaker audio: {e}")
         logger.error(traceback.format_exc())
