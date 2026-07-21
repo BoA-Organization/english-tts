@@ -5,7 +5,7 @@ ENV PYTHONUNBUFFERED=1 \
     HF_HOME=/models/huggingface \
     TRANSFORMERS_CACHE=/models/huggingface \
     MODEL_ID=k2-fsa/OmniVoice \
-    SPEAKER_AUDIO=/app/speaker.mp3 \
+    SPEAKER_AUDIO=/app/speaker.wav \
     SPEAKER_TEXT_FILE=/app/speaker.txt
 
 WORKDIR /app
@@ -28,7 +28,7 @@ COPY requirements.txt /app/requirements.txt
 RUN python -m pip install --no-cache-dir -r /app/requirements.txt
 
 COPY app.py /app/app.py
-COPY speaker.mp3 /app/speaker.mp3
+COPY speaker.wav /app/speaker.wav
 COPY speaker.txt /app/speaker.txt
 
 RUN mkdir -p /models/huggingface && \

@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 MODEL_ID = os.getenv("MODEL_ID", "k2-fsa/OmniVoice")
-SPEAKER_AUDIO = os.getenv("SPEAKER_AUDIO", "/app/speaker.mp3")
+SPEAKER_AUDIO = os.getenv("SPEAKER_AUDIO", "/app/speaker.wav")
 SPEAKER_TEXT_FILE = os.getenv("SPEAKER_TEXT_FILE", "/app/speaker.txt")
 SAMPLE_RATE = 24_000
 
@@ -76,10 +76,19 @@ async def lifespan(app: FastAPI):
     logger.info(f"Loading speaker audio from {SPEAKER_AUDIO}...")
     try:
         speaker_audio_data, speaker_sample_rate = sf.read(SPEAKER_AUDIO)
+        
+        # Check audio properties
+        logger.info(f"Raw audio loaded: shape={speaker_audio_data.shape}, sample_rate={speaker_sample_rate}, dtype={speaker_audio_data.dtype}")
+        logger.info(f"Audio stats - min={speaker_audio_data.min():.6f}, max={speaker_audio_data.max():.6f}, mean={speaker_audio_data.mean():.6f}")
+        
+        # Normalize audio if needed to prevent silence detection issues
+        if speaker_audio_data.max() > 0:
+            speaker_audio_data = speaker_audio_data / max(abs(speaker_audio_data.max()), abs(speaker_audio_data.min()))
+            logger.info("Audio normalized to [-1, 1] range")
+        
         # OmniVoice expects (audio, sample_rate) tuple for ref_audio
         speaker_audio = (speaker_audio_data, speaker_sample_rate)
-        logger.info(f"Speaker audio loaded: shape={speaker_audio_data.shape}, sample_rate={speaker_sample_rate}, dtype={speaker_audio_data.dtype}")
-        logger.info(f"Audio min={speaker_audio_data.min():.6f}, max={speaker_audio_data.max():.6f}, mean={speaker_audio_data.mean():.6f}")
+        logger.info(f"Speaker audio prepared: shape={speaker_audio_data.shape}, normalized_range=[{speaker_audio_data.min():.6f}, {speaker_audio_data.max():.6f}]")
     except Exception as e:
         logger.error(f"Failed to load speaker audio: {e}")
         logger.error(traceback.format_exc())
@@ -108,9 +117,7 @@ async def lifespan(app: FastAPI):
                     text="Hello world",
                     ref_audio=speaker_audio,
                     ref_text=speaker_text,
-                    preprocess_kwargs={
-                        "remove_silence": False,  # Don't remove silence from reference audio
-                    }
+                    preprocess_prompt=False,  # Don't preprocess/remove silence from reference audio
                 )
             logger.info(f"Model warmup completed successfully. Result type: {type(warmup_result)}")
         except Exception as e:
@@ -190,9 +197,7 @@ def generate_speech(request: TTSRequest):
                     text=text,
                     ref_audio=speaker_audio,
                     ref_text=speaker_text,
-                    preprocess_kwargs={
-                        "remove_silence": False,  # Don't remove silence from reference audio
-                    }
+                    preprocess_prompt=False,  # Don't preprocess/remove silence from reference audio
                 )
                 logger.info(f"Generation completed. Result type: {type(audio_list)}, length: {len(audio_list) if audio_list else 0}")
 
