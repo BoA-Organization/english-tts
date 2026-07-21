@@ -79,6 +79,7 @@ async def lifespan(app: FastAPI):
         # OmniVoice expects (audio, sample_rate) tuple for ref_audio
         speaker_audio = (speaker_audio_data, speaker_sample_rate)
         logger.info(f"Speaker audio loaded: shape={speaker_audio_data.shape}, sample_rate={speaker_sample_rate}, dtype={speaker_audio_data.dtype}")
+        logger.info(f"Audio min={speaker_audio_data.min():.6f}, max={speaker_audio_data.max():.6f}, mean={speaker_audio_data.mean():.6f}")
     except Exception as e:
         logger.error(f"Failed to load speaker audio: {e}")
         logger.error(traceback.format_exc())
@@ -107,6 +108,9 @@ async def lifespan(app: FastAPI):
                     text="Hello world",
                     ref_audio=speaker_audio,
                     ref_text=speaker_text,
+                    preprocess_kwargs={
+                        "remove_silence": False,  # Don't remove silence from reference audio
+                    }
                 )
             logger.info(f"Model warmup completed successfully. Result type: {type(warmup_result)}")
         except Exception as e:
@@ -186,6 +190,9 @@ def generate_speech(request: TTSRequest):
                     text=text,
                     ref_audio=speaker_audio,
                     ref_text=speaker_text,
+                    preprocess_kwargs={
+                        "remove_silence": False,  # Don't remove silence from reference audio
+                    }
                 )
                 logger.info(f"Generation completed. Result type: {type(audio_list)}, length: {len(audio_list) if audio_list else 0}")
 
