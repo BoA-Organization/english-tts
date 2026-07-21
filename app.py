@@ -81,6 +81,12 @@ async def lifespan(app: FastAPI):
         logger.info(f"Raw audio loaded: shape={speaker_audio_data.shape}, sample_rate={speaker_sample_rate}, dtype={speaker_audio_data.dtype}")
         logger.info(f"Audio stats - min={speaker_audio_data.min():.6f}, max={speaker_audio_data.max():.6f}, mean={speaker_audio_data.mean():.6f}")
         
+        # Convert stereo to mono if needed
+        if speaker_audio_data.ndim > 1:
+            logger.info(f"Converting stereo ({speaker_audio_data.shape[1]} channels) to mono...")
+            speaker_audio_data = speaker_audio_data.mean(axis=1)
+            logger.info(f"Converted to mono: shape={speaker_audio_data.shape}")
+        
         # Normalize audio if needed to prevent silence detection issues
         if speaker_audio_data.max() > 0:
             speaker_audio_data = speaker_audio_data / max(abs(speaker_audio_data.max()), abs(speaker_audio_data.min()))
